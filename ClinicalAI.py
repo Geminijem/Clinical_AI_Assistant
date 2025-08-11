@@ -328,4 +328,47 @@ def main():
         if st.button("Add Mnemonic"):
             if course and topic and name and content:
                 mid = str(uuid.uuid4())
-                c.execute("INSERT INTO mnemonics (id,user_id,course,topic,name,content
+                c.execute(
+                    "INSERT INTO mnemonics (id,user_id,course,topic,name,content,created_at) VALUES (?,?,?,?,?,?,?)",
+                    (mid, user_id, course, topic, name, content, now_iso())
+                )
+                conn.commit()
+                st.success("Mnemonic added.")
+                st.experimental_rerun()
+            else:
+                st.error("Please fill in all fields.")
+
+    elif page == "Bank Vaults":
+        st.header("Bank Vault Notes")
+        subject = st.selectbox("Subject", SUBJECTS)
+        c = conn.cursor()
+        c.execute(
+            "SELECT id,title,content FROM vault_notes WHERE user_id=? AND subject=?",
+            (user_id, subject)
+        )
+        notes = c.fetchall()
+        for vid, title, content in notes:
+            st.write(f"**{title}**")
+            st.write(content)
+        st.markdown("### Add Vault Note")
+        vtitle = st.text_input("Title", key="vault_title")
+        vcontent = st.text_area("Content", key="vault_content")
+        if st.button("Add Vault Note"):
+            if vtitle and vcontent:
+                vid = str(uuid.uuid4())
+                c.execute(
+                    "INSERT INTO vault_notes (id,user_id,subject,title,content,created_at) VALUES (?,?,?,?,?,?)",
+                    (vid, user_id, subject, vtitle, vcontent, now_iso())
+                )
+                conn.commit()
+                st.success("Vault note added.")
+                st.experimental_rerun()
+            else:
+                st.error("Title and content required.")
+
+    elif page == "Settings":
+        st.header("Settings")
+        st.write("No settings implemented yet.")
+
+if __name__ == "__main__":
+    main()
