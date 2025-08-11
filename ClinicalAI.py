@@ -1,32 +1,41 @@
 # app.py
 # Clinical AI Assistant - single-file Streamlit app (Hugging Face Inference API friendly)
-# Put this file in the root of your repo/Space (filename: app.py)
+# Features: menu/navigation, AI assistant (optional HF), ChatGPT external button, quizzes, flashcards,
+# daily check-ins, motivational quotes, study charts, planner/reminders, mnemonics, bank vault notes,
+# basic signup/signin, optional vault encryption (session-only password), in-browser notifications.
 
 import streamlit as st
 from streamlit.components.v1 import components
-import sqlite3, os, json, uuid, base64, requests
+import sqlite3
+import os
+import json
+import uuid
+import base64
+import requests
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+
+# optional encryption libs
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
 # -----------------------
-# Config / constants
+# Configuration
 # -----------------------
 DB_PATH = "app_data.db"
 HF_INFERENCE_URL = "https://api-inference.huggingface.co/models/"
-DEFAULT_HF_MODEL = "google/flan-t5-small"
+DEFAULT_HF_MODEL = "google/flan-t5-small"   # changeable
 SUBJECTS = [
     "Pharmacology","Microbiology","Hematology","Pathology","Forensic Medicine",
     "Obstetrics and Gynecology","Pediatrics","Community and Public Medicine"
 ]
 
 # -----------------------
-# DB helpers
+# Database initialization
 # -----------------------
 def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -76,24 +85,25 @@ def init_db():
 
 conn = init_db()
 
+# -----------------------
+# Small utilities
+# -----------------------
 def now_iso():
     return datetime.utcnow().isoformat()
 
-# -----------------------
-# Utility helpers
-# -----------------------
 def gen_token(nbytes=18):
     return base64.urlsafe_b64encode(os.urandom(nbytes)).decode()
 
 # -----------------------
-# Auth: signup, signin, verify, reset
+# Auth helpers
 # -----------------------
 def create_user(email, password):
     c = conn.cursor()
     uid = str(uuid.uuid4())
     pw_hash = generate_password_hash(password)
     try:
-        c.execute("INSERT INTO users (id,email,password_hash,created_at) VALUES (?,?,?,?)", (uid,email,pw_hash, now_iso()))
+        c.execute("INSERT INTO users (id,email,password_hash,created_at) VALUES (?,?,?,?)",
+                  (uid, email, pw_hash, now_iso()))
         conn.commit()
         return uid
     except sqlite3.IntegrityError:
@@ -107,7 +117,7 @@ def authenticate(email, password):
         return None
     uid, pw_hash, verified = r
     if check_password_hash(pw_hash, password):
-        return {"id":uid, "verified": bool(verified)}
+        return {"id": uid, "verified": bool(verified)}
     return None
 
 def set_verification_token(uid):
@@ -153,7 +163,7 @@ def perform_password_reset(token, new_password):
     return uid
 
 # -----------------------
-# Encryption: derive key, encrypt/decrypt (Fernet + PBKDF2)
+# Encryption helpers (Fernet + PBKDF2)
 # -----------------------
 def derive_key(password: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=200000, backend=default_backend())
@@ -172,7 +182,7 @@ def decrypt_from_b64(password: str, b64token: str, salt: bytes) -> str:
     return f.decrypt(token).decode()
 
 # -----------------------
-# HF inference (HTTP)
+# Hugging Face Inference (HTTP)
 # -----------------------
 def hf_query(prompt: str, hf_api_key: str, model: str = DEFAULT_HF_MODEL):
     if not hf_api_key:
@@ -191,7 +201,6 @@ def hf_query(prompt: str, hf_api_key: str, model: str = DEFAULT_HF_MODEL):
         first = data[0]
         if isinstance(first, dict) and 'generated_text' in first:
             return first['generated_text']
-        # fallback
         try:
             return first.get('generated_text') or str(first)
         except Exception:
@@ -207,80 +216,80 @@ def insert_quiz(user_id, title, data_json):
     c = conn.cursor()
     qid = str(uuid.uuid4())
     c.execute("INSERT INTO quizzes (id,user_id,title,data,created_at) VALUES (?,?,?,?,?)",
-              (qid,user_id,title,json.dumps(data_json), now_iso()))
+              (qid, user_id, title, json.dumps(data_json), now_iso()))
     conn.commit()
 
 def list_quizzes(user_id):
     c = conn.cursor()
     c.execute("SELECT id,title,data,created_at FROM quizzes WHERE user_id=?", (user_id,))
     rows = c.fetchall()
-    return [{'id':r[0],'title':r[1],'data':json.loads(r[2]),'created_at':r[3]} for r in rows]
+    return [{'id': r[0], 'title': r[1], 'data': json.loads(r[2]), 'created_at': r[3]} for r in rows]
 
 def delete_quiz(qid, user_id):
     c = conn.cursor()
-    c.execute("DELETE FROM quizzes WHERE id=? AND user_id=?", (qid,user_id))
+    c.execute("DELETE FROM quizzes WHERE id=? AND user_id=?", (qid, user_id))
     conn.commit()
 
 def add_flashcard(user_id, front, back):
     c = conn.cursor()
     fid = str(uuid.uuid4())
     c.execute("INSERT INTO flashcards (id,user_id,front,back,created_at) VALUES (?,?,?,?,?)",
-              (fid,user_id,front,back, now_iso()))
+              (fid, user_id, front, back, now_iso()))
     conn.commit()
 
 def list_flashcards(user_id):
     c = conn.cursor()
     c.execute("SELECT id,front,back,created_at FROM flashcards WHERE user_id=?", (user_id,))
-    return [{'id':r[0],'front':r[1],'back':r[2],'created_at':r[3]} for r in c.fetchall()]
+    return [{'id': r[0], 'front': r[1], 'back': r[2], 'created_at': r[3]} for r in c.fetchall()]
 
 def add_checkin(user_id, date, mood, focus, hours, notes):
     c = conn.cursor()
     cid = str(uuid.uuid4())
     c.execute("INSERT INTO checkins (id,user_id,date,mood,focus,hours,notes,created_at) VALUES (?,?,?,?,?,?,?,?)",
-              (cid,user_id,date,mood,focus,hours,notes, now_iso()))
+              (cid, user_id, date, mood, focus, hours, notes, now_iso()))
     conn.commit()
 
 def list_checkins(user_id):
     c = conn.cursor()
     c.execute("SELECT id,date,mood,focus,hours,notes,created_at FROM checkins WHERE user_id=? ORDER BY date ASC", (user_id,))
     rows = c.fetchall()
-    return [{'id':r[0],'date':r[1],'mood':r[2],'focus':r[3],'hours':r[4],'notes':r[5],'created_at':r[6]} for r in rows]
+    return [{'id': r[0], 'date': r[1], 'mood': r[2], 'focus': r[3], 'hours': r[4], 'notes': r[5], 'created_at': r[6]} for r in rows]
 
 def add_quote(user_id, quote, author=''):
     c = conn.cursor()
     qid = str(uuid.uuid4())
     c.execute("INSERT INTO quotes (id,user_id,quote,author,created_at) VALUES (?,?,?,?,?)",
-              (qid,user_id,quote,author, now_iso()))
+              (qid, user_id, quote, author, now_iso()))
     conn.commit()
 
 def list_quotes(user_id):
     c = conn.cursor()
     c.execute("SELECT id,quote,author,created_at FROM quotes WHERE user_id=?", (user_id,))
-    return [{'id':r[0],'quote':r[1],'author':r[2],'created_at':r[3]} for r in c.fetchall()]
+    return [{'id': r[0], 'quote': r[1], 'author': r[2], 'created_at': r[3]} for r in c.fetchall()]
 
 def add_reminder(user_id, title, remind_at, notes=''):
     c = conn.cursor()
     rid = str(uuid.uuid4())
     c.execute("INSERT INTO reminders (id,user_id,title,remind_at,notes,created_at) VALUES (?,?,?,?,?,?)",
-              (rid,user_id,title,remind_at,notes, now_iso()))
+              (rid, user_id, title, remind_at, notes, now_iso()))
     conn.commit()
 
 def list_reminders(user_id):
     c = conn.cursor()
     c.execute("SELECT id,title,remind_at,notes,created_at FROM reminders WHERE user_id=? ORDER BY remind_at ASC", (user_id,))
-    return [{'id':r[0],'title':r[1],'remind_at':r[2],'notes':r[3],'created_at':r[4]} for r in c.fetchall()]
+    return [{'id': r[0], 'title': r[1], 'remind_at': r[2], 'notes': r[3], 'created_at': r[4]} for r in c.fetchall()]
 
 def add_mnemonic(user_id, course, topic, name, content):
     c = conn.cursor()
     mid = str(uuid.uuid4())
     c.execute("INSERT INTO mnemonics (id,user_id,course,topic,name,content,created_at) VALUES (?,?,?,?,?,?,?)",
-              (mid,user_id,course,topic,name,content, now_iso()))
+              (mid, user_id, course, topic, name, content, now_iso()))
     conn.commit()
 
 def list_mnemonics(user_id):
     c = conn.cursor()
     c.execute("SELECT id,course,topic,name,content,created_at FROM mnemonics WHERE user_id=?", (user_id,))
-    return [{'id':r[0],'course':r[1],'topic':r[2],'name':r[3],'content':r[4],'created_at':r[5]} for r in c.fetchall()]
+    return [{'id': r[0], 'course': r[1], 'topic': r[2], 'name': r[3], 'content': r[4], 'created_at': r[5]} for r in c.fetchall()]
 
 def add_vault_note(user_id, subject, title, content, encrypted=0):
     if subject not in SUBJECTS:
@@ -288,21 +297,21 @@ def add_vault_note(user_id, subject, title, content, encrypted=0):
     c = conn.cursor()
     vid = str(uuid.uuid4())
     c.execute("INSERT INTO vault_notes (id,user_id,subject,title,content,encrypted,created_at) VALUES (?,?,?,?,?,?,?)",
-              (vid,user_id,subject,title,content, encrypted, now_iso()))
+              (vid, user_id, subject, title, content, encrypted, now_iso()))
     conn.commit()
 
 def list_vault_notes(user_id, subject=None):
     c = conn.cursor()
     if subject:
-        c.execute("SELECT id,subject,title,content,encrypted,created_at FROM vault_notes WHERE user_id=? AND subject=?", (user_id,subject))
+        c.execute("SELECT id,subject,title,content,encrypted,created_at FROM vault_notes WHERE user_id=? AND subject=?", (user_id, subject))
     else:
         c.execute("SELECT id,subject,title,content,encrypted,created_at FROM vault_notes WHERE user_id=?", (user_id,))
-    return [{'id':r[0],'subject':r[1],'title':r[2],'content':r[3],'encrypted':r[4],'created_at':r[5]} for r in c.fetchall()]
+    return [{'id': r[0], 'subject': r[1], 'title': r[2], 'content': r[3], 'encrypted': r[4], 'created_at': r[5]} for r in c.fetchall()]
 
 # -----------------------
-# Voice component (Web Speech API simple widget)
+# Voice widget (Web Speech API)
 # -----------------------
-VOICE_COMPONENT_HTML = """
+VOICE_COMPONENT_HTML = '''
 <div>
   <button id="startBtn">🎤 Start Voice Input</button>
   <div id="transcript" style="white-space:pre-wrap;margin-top:6px;"></div>
@@ -330,30 +339,31 @@ VOICE_COMPONENT_HTML = """
     }
   </script>
 </div>
-"""
+'''
 def voice_component():
-    components.html(VOICE_COMPONENT_HTML, height=140)
+    components.html(VOICE_COMPONENT_HTML, height=160)
 
 def speak_client(text):
-    # Post a message into the iframe so the voice component (or client-side code) can speak it.
+    # posts a message to the page so client-side code can speak (if implemented)
     components.html(f"<script>window.postMessage({{'type':'speak','text':{json.dumps(text)}}}, '*');</script>", height=0)
 
 # -----------------------
-# Streamlit UI
+# Streamlit UI - setup
 # -----------------------
 st.set_page_config(page_title="Clinical AI Assistant", layout="wide")
 if 'user' not in st.session_state:
     st.session_state.user = None
 if 'hf_api_key' not in st.session_state:
-    st.session_state.hf_api_key = os.environ.get("HF_API_KEY","")
+    # session-level HF key (optionally set via Secrets on spaces)
+    st.session_state.hf_api_key = os.environ.get("HF_API_KEY", "")
 if 'vault_passwords' not in st.session_state:
     st.session_state.vault_passwords = {}
 
-# Sidebar - Authentication & integration
+# Sidebar - authentication + integration controls
 with st.sidebar:
     st.title("Clinical AI Assistant")
     if not st.session_state.user:
-        mode = st.radio("Account", ["Sign in","Sign up","Guest"])
+        mode = st.radio("Account", ["Sign in", "Sign up", "Guest"])
         if mode == "Sign up":
             su_email = st.text_input("Email", key="su_email")
             su_password = st.text_input("Password", type="password", key="su_pw")
@@ -361,10 +371,10 @@ with st.sidebar:
                 uid = create_user(su_email, su_password)
                 if uid:
                     tok = set_verification_token(uid)
-                    st.success("Account created (demo). Verification token:")
+                    st.success("Account created (demo). Use token to verify:")
                     st.code(tok)
                 else:
-                    st.error("Account exists already")
+                    st.error("Email already exists")
         elif mode == "Sign in":
             in_email = st.text_input("Email", key="in_email")
             in_password = st.text_input("Password", type="password", key="in_pw")
@@ -377,8 +387,8 @@ with st.sidebar:
                     st.error("Invalid credentials")
         else:
             if st.button("Continue as Guest"):
-                st.session_state.user = {"id":"guest","verified":True}
-                st.info("Guest mode")
+                st.session_state.user = {"id": "guest", "verified": True}
+                st.info("Guest mode: data stored locally")
     else:
         st.markdown("**Signed in**")
         st.write(st.session_state.user)
@@ -388,26 +398,26 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Hugging Face (optional)")
-    hf_key_input = st.text_input("HF API key (optional)", type="password", key="hf_key_input")
+    hf_in = st.text_input("HF API key (optional)", type="password", key="hf_key_input")
     if st.button("Save HF Key"):
-        st.session_state.hf_api_key = hf_key_input or st.session_state.hf_api_key
+        st.session_state.hf_api_key = hf_in or st.session_state.hf_api_key
         st.success("Saved HF key to session (demo). On Spaces use Secrets for persistence.")
     st.text_input("HF model id", value=DEFAULT_HF_MODEL, key="hf_model")
 
     st.markdown("---")
     st.subheader("Vault (optional encryption)")
-    vp = st.text_input("Vault password (in-memory)", type="password", key="vault_pass")
+    vpass = st.text_input("Vault password (in-memory)", type="password", key="vault_pass")
     if st.button("Set vault password"):
         if st.session_state.user:
-            uid = st.session_state.user["id"]
+            uid = st.session_state.user['id']
             salt = os.urandom(16)
             c = conn.cursor()
             c.execute("UPDATE users SET vault_salt=? WHERE id=?", (base64.b64encode(salt).decode(), uid))
             conn.commit()
-            st.session_state.vault_passwords[uid] = vp
+            st.session_state.vault_passwords[uid] = vpass
             st.success("Vault password stored in session memory (demo).")
         else:
-            st.error("Please sign in first")
+            st.error("Sign in first to set vault password")
 
     st.markdown("---")
     st.subheader("Account tokens (demo)")
@@ -421,35 +431,43 @@ with st.sidebar:
             st.error("Email not found")
 
 # Navigation menu
-menu = ["Home","AI Assistant","ChatGPT (external)","Quizzes","Flashcards","Daily Check-in","Quotes","Study Planner","Study Charts","Mnemonics","Bank Vaults","Settings"]
+menu = [
+    "Home","AI Assistant","ChatGPT (external)","Quizzes","Flashcards",
+    "Daily Check-in","Quotes","Study Planner","Study Charts","Mnemonics",
+    "Bank Vaults","Settings"
+]
 page = st.sidebar.radio("Navigate", menu)
+
+# -----------------------
+# Pages
+# -----------------------
 
 # HOME
 if page == "Home":
     st.header("Clinical AI Assistant")
-    st.write("Prototype: sign up / sign in, use the AI Assistant (HF optional), edit quizzes/flashcards, use vaults, etc.")
-    st.info("Best experience in Chrome on Android for voice features.")
+    st.write("Prototype: sign up, sign in, use AI assistant, edit quizzes/flashcards, and keep vault notes.")
+    st.info("Voice features: best experience on Chrome for Android. Encrypted vaults: password stored only in session memory (demo).")
 
 # AI ASSISTANT
 if page == "AI Assistant":
     st.header("AI Assistant (local + optional HF Inference)")
     prompt = st.text_area("Ask a question or paste voice transcript")
-    hf_key = st.session_state.get("hf_api_key","") or os.environ.get("HF_API_KEY","")
+    hf_key = st.session_state.get("hf_api_key", "") or os.environ.get("HF_API_KEY", "")
     hf_model = st.session_state.get("hf_model", DEFAULT_HF_MODEL)
     col1, col2 = st.columns([3,1])
     with col1:
         if st.button("Send"):
             reply = None
+            # try HF if key present
             if hf_key:
-                with st.spinner("Querying Hugging Face Inference API..."):
+                with st.spinner("Querying Hugging Face..."):
                     reply = hf_query(prompt, hf_key, model=hf_model)
+            # fallback local note search + echo
             if not reply:
-                # fallback: search local vault notes
                 reply_lines = []
                 if st.session_state.user:
                     notes = list_vault_notes(st.session_state.user['id'])
                     for n in notes:
-                        # if encrypted, skip in fallback
                         if n['encrypted']:
                             continue
                         hay = (n['title'] + " " + n['content']).lower()
@@ -458,9 +476,9 @@ if page == "AI Assistant":
                 if reply_lines:
                     reply = "\n\n---\n\n".join(reply_lines)
                 else:
-                    reply = "No HF key and no matching local (plaintext) notes found. Echo:\n\n" + prompt
+                    reply = "No HF key and no matching local plaintext notes. Echo:\n\n" + prompt
             st.text_area("Assistant reply", value=reply, height=240)
-            if st.checkbox("Speak reply (client-side)"):
+            if st.checkbox("Speak reply (client)"):
                 speak_client(reply)
     with col2:
         st.subheader("Voice input")
@@ -472,19 +490,7 @@ if page == "AI Assistant":
         if st.button("Open Gemini (new tab)"):
             components.html("<script>window.open('https://gemini.google.com','_blank')</script>", height=0)
 
-# External ChatGPT button page
+# External ChatGPT (simple wrapper)
 if page == "ChatGPT (external)":
-    st.header("Open external ChatGPT (web)")
-    st.write("This opens chat.openai.com in a new tab so you can do deeper research there.")
-    if st.button("Open ChatGPT"):
-        components.html("<script>window.open('https://chat.openai.com','_blank')</script>", height=0)
-
-# QUIZZES
-if page == "Quizzes":
-    st.header("Quizzes (create / take / delete)")
-    if not st.session_state.user:
-        st.warning("Sign in or use Guest to create/take quizzes")
-    else:
-        with st.expander("Create new quiz"):
-            qt = st.text_input("Quiz title")
-            qjson = st.text_area("Quiz JSON (list of {question, op
+    st.header("External ChatGPT")
+    st.write("This opens chat.openai.com i
