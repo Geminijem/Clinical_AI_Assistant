@@ -1,0 +1,33 @@
+# Core app
+streamlit
+pandas
+numpy
+
+# AI model integration (Hugging Face)
+transformers
+torch
+
+# Authentication & encryption
+streamlit-authenticator
+bcrypt
+cryptography
+email-validator
+
+# Charts & visuals
+matplotlib
+plotly
+
+# Scheduling & reminders
+schedule
+
+# Voice input/output
+gTTS
+SpeechRecognition
+pyaudio
+
+# PDF export & file handling
+fpdf
+python-docx
+
+# Utilities
+requests
