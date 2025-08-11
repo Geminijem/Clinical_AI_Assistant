@@ -31,8 +31,7 @@
 #It uses SQLite for persistence and streamlit.components.v1 for small JS integration.
 
 import streamlit as st 
-from streamlit.components.v1 
-import components 
+from streamlit.components.v1 import components 
 import sqlite3 
 from werkzeug.security 
 import generate_password_hash, check_password_hash 
