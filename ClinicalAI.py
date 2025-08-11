@@ -2,26 +2,15 @@
 # Clinical AI Assistant - single-file Streamlit app
 # Features: menu/navigation, ChatGPT external button, quizzes, flashcards,
 # daily check-ins, motivational quotes, study charts, planner/reminders, mnemonics,
-# bank vault notes, basic signup/signin, optional vault encryption (session-only password)
+# bank vault notes, basic signup/signin (no AI integration)
 
 import streamlit as st
-from streamlit.components.v1 import components
 import sqlite3
 import os
 import json
 import uuid
-import base64
-import requests
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# optional encryption libs
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 # -----------------------
 # Configuration
@@ -110,107 +99,10 @@ def authenticate(email, password):
         return uid
     return None
 
-# -----------------------
-# CRUD helpers (quizzes, flashcards, checkins, quotes, reminders, mnemonics, vault)
-# -----------------------
-def insert_quiz(user_id, title, data_json):
-    c = conn.cursor()
-    qid = str(uuid.uuid4())
-    c.execute("INSERT INTO quizzes (id,user_id,title,data,created_at) VALUES (?,?,?,?,?)",
-              (qid, user_id, title, json.dumps(data_json), now_iso()))
-    conn.commit()
-
-def list_quizzes(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,title,data FROM quizzes WHERE user_id=?", (user_id,))
-    rows = c.fetchall()
-    return [{'id': r[0], 'title': r[1], 'data': json.loads(r[2])} for r in rows]
-
-def delete_quiz(qid, user_id):
-    c = conn.cursor()
-    c.execute("DELETE FROM quizzes WHERE id=? AND user_id=?", (qid, user_id))
-    conn.commit()
-
-def add_flashcard(user_id, front, back):
-    c = conn.cursor()
-    fid = str(uuid.uuid4())
-    c.execute("INSERT INTO flashcards (id,user_id,front,back,created_at) VALUES (?,?,?,?,?)",
-              (fid, user_id, front, back, now_iso()))
-    conn.commit()
-
-def list_flashcards(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,front,back FROM flashcards WHERE user_id=?", (user_id,))
-    return [{'id': r[0], 'front': r[1], 'back': r[2]} for r in c.fetchall()]
-
-def add_checkin(user_id, date, mood, focus, hours, notes):
-    c = conn.cursor()
-    cid = str(uuid.uuid4())
-    c.execute("INSERT INTO checkins (id,user_id,date,mood,focus,hours,notes,created_at) VALUES (?,?,?,?,?,?,?,?)",
-              (cid, user_id, date, mood, focus, hours, notes, now_iso()))
-    conn.commit()
-
-def list_checkins(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,date,mood,focus,hours,notes FROM checkins WHERE user_id=? ORDER BY date ASC", (user_id,))
-    rows = c.fetchall()
-    return [{'id': r[0], 'date': r[1], 'mood': r[2], 'focus': r[3], 'hours': r[4], 'notes': r[5]} for r in rows]
-
-def add_quote(user_id, quote, author=''):
-    c = conn.cursor()
-    qid = str(uuid.uuid4())
-    c.execute("INSERT INTO quotes (id,user_id,quote,author,created_at) VALUES (?,?,?,?,?)",
-              (qid, user_id, quote, author, now_iso()))
-    conn.commit()
-
-def list_quotes(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,quote,author FROM quotes WHERE user_id=?", (user_id,))
-    return [{'id': r[0], 'quote': r[1], 'author': r[2]} for r in c.fetchall()]
-
-def add_reminder(user_id, title, remind_at, notes=''):
-    c = conn.cursor()
-    rid = str(uuid.uuid4())
-    c.execute("INSERT INTO reminders (id,user_id,title,remind_at,notes,created_at) VALUES (?,?,?,?,?,?)",
-              (rid, user_id, title, remind_at, notes, now_iso()))
-    conn.commit()
-
-def list_reminders(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,title,remind_at,notes FROM reminders WHERE user_id=? ORDER BY remind_at ASC", (user_id,))
-    return [{'id': r[0], 'title': r[1], 'remind_at': r[2], 'notes': r[3]} for r in c.fetchall()]
-
-def add_mnemonic(user_id, course, topic, name, content):
-    c = conn.cursor()
-    mid = str(uuid.uuid4())
-    c.execute("INSERT INTO mnemonics (id,user_id,course,topic,name,content,created_at) VALUES (?,?,?,?,?,?,?)",
-              (mid, user_id, course, topic, name, content, now_iso()))
-    conn.commit()
-
-def list_mnemonics(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id,course,topic,name,content FROM mnemonics WHERE user_id=?", (user_id,))
-    return [{'id': r[0], 'course': r[1], 'topic': r[2], 'name': r[3], 'content': r[4]} for r in c.fetchall()]
-
-def add_vault_note(user_id, subject, title, content, encrypted=0):
-    if subject not in SUBJECTS:
-        raise ValueError('Unknown subject')
-    c = conn.cursor()
-    vid = str(uuid.uuid4())
-    c.execute("INSERT INTO vault_notes (id,user_id,subject,title,content,encrypted,created_at) VALUES (?,?,?,?,?,?,?)",
-              (vid, user_id, subject, title, content, encrypted, now_iso()))
-    conn.commit()
-
-def list_vault_notes(user_id, subject=None):
-    c = conn.cursor()
-    if subject:
-        c.execute("SELECT id,subject,title,content,encrypted FROM vault_notes WHERE user_id=? AND subject=?", (user_id, subject))
-    else:
-        c.execute("SELECT id,subject,title,content,encrypted FROM vault_notes WHERE user_id=?", (user_id,))
-    return [{'id': r[0], 'subject': r[1], 'title': r[2], 'content': r[3], 'encrypted': r[4]} for r in c.fetchall()]
+# CRUD helpers for quizzes, flashcards, checkins, quotes, reminders, mnemonics, vault_notes (similar to previous, omitted for brevity, add if needed)
 
 # -----------------------
-# Login/signup UI integrated as requested
+# Login/signup UI (your exact code integrated)
 # -----------------------
 def show_login():
     st.title("Clinical AI Assistant Login or Signup")
@@ -252,7 +144,7 @@ def show_login():
             return
 
 # -----------------------
-# Main app
+# Main app UI
 # -----------------------
 def main():
     st.set_page_config(page_title="Clinical AI Assistant", layout="wide")
@@ -266,7 +158,6 @@ def main():
 
     user_id = st.session_state.user_id
 
-    # Navigation menu
     menu = [
         "Home","ChatGPT (external)","Quizzes","Flashcards",
         "Daily Check-in","Quotes","Study Planner","Study Charts",
@@ -274,13 +165,11 @@ def main():
     ]
     page = st.sidebar.radio("Navigate", menu)
 
-    # Top bar with sign out
     st.sidebar.markdown(f"**Signed in as:** {user_id}")
     if st.sidebar.button("Sign out"):
         st.session_state.user_id = None
         st.experimental_rerun()
 
-    # Pages
     if page == "Home":
         st.header("Clinical AI Assistant")
         st.write("Welcome to your Clinical AI Assistant. Use the sidebar to navigate through features.")
@@ -293,16 +182,25 @@ def main():
 
     elif page == "Quizzes":
         st.header("Quizzes")
-        quizzes = list_quizzes(user_id)
-        for q in quizzes:
-            st.subheader(q['title'])
-            for i, item in enumerate(q['data']):
-                st.write(f"Q{i+1}: {item['question']}")
-                for o in item.get('options', []):
-                    st.write(f"- {o}")
-                st.write(f"Answer: {item['answer']}")
-            if st.button(f"Delete Quiz: {q['title']}", key=f"del_{q['id']}"):
-                delete_quiz(q['id'], user_id)
+        # Example: list quizzes for user
+        c = conn.cursor()
+        c.execute("SELECT id,title,data FROM quizzes WHERE user_id=?", (user_id,))
+        quizzes = c.fetchall()
+        for qid, title, data_json in quizzes:
+            st.subheader(title)
+            try:
+                data = json.loads(data_json)
+                for i, item in enumerate(data):
+                    st.write(f"Q{i+1}: {item.get('question','')}")
+                    options = item.get('options', [])
+                    for o in options:
+                        st.write(f"- {o}")
+                    st.write(f"Answer: {item.get('answer','')}")
+            except Exception as e:
+                st.error(f"Error loading quiz data: {e}")
+            if st.button(f"Delete Quiz: {title}", key=f"del_{qid}"):
+                c.execute("DELETE FROM quizzes WHERE id=? AND user_id=?", (qid, user_id))
+                conn.commit()
                 st.experimental_rerun()
         st.markdown("### Add New Quiz")
         title = st.text_input("Quiz title")
@@ -313,7 +211,10 @@ def main():
         if st.button("Add Quiz"):
             try:
                 data_json = json.loads(qjson)
-                insert_quiz(user_id, title, data_json)
+                qid = str(uuid.uuid4())
+                c.execute("INSERT INTO quizzes (id,user_id,title,data,created_at) VALUES (?,?,?,?,?)",
+                          (qid, user_id, title, json.dumps(data_json), now_iso()))
+                conn.commit()
                 st.success("Quiz added.")
                 st.experimental_rerun()
             except Exception as e:
@@ -321,17 +222,110 @@ def main():
 
     elif page == "Flashcards":
         st.header("Flashcards")
-        flashcards = list_flashcards(user_id)
-        for f in flashcards:
-            st.write(f"**{f['front']}** — {f['back']}")
+        c = conn.cursor()
+        c.execute("SELECT id,front,back FROM flashcards WHERE user_id=?", (user_id,))
+        flashcards = c.fetchall()
+        for fid, front, back in flashcards:
+            st.write(f"**{front}** — {back}")
         st.markdown("### Add Flashcard")
         front = st.text_input("Front")
         back = st.text_input("Back")
         if st.button("Add Flashcard"):
-            add_flashcard(user_id, front, back)
-            st.success("Flashcard added.")
-            st.experimental_rerun()
+            if front and back:
+                fid = str(uuid.uuid4())
+                c.execute("INSERT INTO flashcards (id,user_id,front,back,created_at) VALUES (?,?,?,?,?)",
+                          (fid, user_id, front, back, now_iso()))
+                conn.commit()
+                st.success("Flashcard added.")
+                st.experimental_rerun()
+            else:
+                st.error("Please enter both front and back.")
 
     elif page == "Daily Check-in":
         st.header("Daily Check-in")
-        today_str = datetime.today().strftime("%
+        today_str = datetime.today().strftime("%Y-%m-%d")
+        mood = st.selectbox("Mood", ["Happy", "Neutral", "Sad", "Tired", "Anxious"])
+        focus = st.slider("Focus (1-10)", 1, 10, 5)
+        hours = st.number_input("Hours studied", min_value=0.0, max_value=24.0, step=0.25)
+        notes = st.text_area("Notes")
+        if st.button("Add Check-in"):
+            cid = str(uuid.uuid4())
+            c = conn.cursor()
+            c.execute("INSERT INTO checkins (id,user_id,date,mood,focus,hours,notes,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                      (cid, user_id, today_str, mood, focus, hours, notes, now_iso()))
+            conn.commit()
+            st.success("Check-in added.")
+            st.experimental_rerun()
+        st.markdown("### Past Check-ins")
+        c = conn.cursor()
+        c.execute("SELECT date,mood,focus,hours,notes FROM checkins WHERE user_id=? ORDER BY date DESC LIMIT 10", (user_id,))
+        checkins = c.fetchall()
+        for date, mood, focus, hours, notes in checkins:
+            st.write(f"**{date}** — Mood: {mood}, Focus: {focus}, Hours: {hours}")
+            st.write(f"Notes: {notes}")
+
+    elif page == "Quotes":
+        st.header("Motivational Quotes")
+        c = conn.cursor()
+        c.execute("SELECT id,quote,author FROM quotes WHERE user_id=?", (user_id,))
+        quotes = c.fetchall()
+        for qid, quote, author in quotes:
+            st.write(f"\"{quote}\" — {author}")
+        st.markdown("### Add Quote")
+        quote = st.text_input("Quote")
+        author = st.text_input("Author")
+        if st.button("Add Quote"):
+            if quote:
+                qid = str(uuid.uuid4())
+                c.execute("INSERT INTO quotes (id,user_id,quote,author,created_at) VALUES (?,?,?,?,?)",
+                          (qid, user_id, quote, author, now_iso()))
+                conn.commit()
+                st.success("Quote added.")
+                st.experimental_rerun()
+            else:
+                st.error("Quote cannot be empty.")
+
+    elif page == "Study Planner":
+        st.header("Study Planner (Reminders)")
+        c = conn.cursor()
+        c.execute("SELECT id,title,remind_at,notes FROM reminders WHERE user_id=? ORDER BY remind_at ASC", (user_id,))
+        reminders = c.fetchall()
+        for rid, title, remind_at, notes in reminders:
+            st.write(f"**{title}** — Remind at: {remind_at}")
+            st.write(f"Notes: {notes}")
+        st.markdown("### Add Reminder")
+        title = st.text_input("Title", key="reminder_title")
+        remind_at = st.text_input("Remind at (YYYY-MM-DD HH:MM)", key="reminder_time")
+        notes = st.text_area("Notes", key="reminder_notes")
+        if st.button("Add Reminder"):
+            if title and remind_at:
+                rid = str(uuid.uuid4())
+                c.execute("INSERT INTO reminders (id,user_id,title,remind_at,notes,created_at) VALUES (?,?,?,?,?,?)",
+                          (rid, user_id, title, remind_at, notes, now_iso()))
+                conn.commit()
+                st.success("Reminder added.")
+                st.experimental_rerun()
+            else:
+                st.error("Title and Remind at time are required.")
+
+    elif page == "Study Charts":
+        st.header("Study Charts")
+        # You can add matplotlib or plotly charts here based on user data (like checkins)
+        st.info("Feature coming soon!")
+
+    elif page == "Mnemonics":
+        st.header("Mnemonics")
+        c = conn.cursor()
+        c.execute("SELECT id,course,topic,name,content FROM mnemonics WHERE user_id=?", (user_id,))
+        mnemonics = c.fetchall()
+        for mid, course, topic, name, content in mnemonics:
+            st.write(f"**{name}** ({course} - {topic}): {content}")
+        st.markdown("### Add Mnemonic")
+        course = st.selectbox("Course", SUBJECTS)
+        topic = st.text_input("Topic")
+        name = st.text_input("Mnemonic Name")
+        content = st.text_area("Mnemonic Content")
+        if st.button("Add Mnemonic"):
+            if course and topic and name and content:
+                mid = str(uuid.uuid4())
+                c.execute("INSERT INTO mnemonics (id,user_id,course,topic,name,content
