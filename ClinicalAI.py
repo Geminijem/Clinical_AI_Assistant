@@ -493,4 +493,4 @@ if page == "AI Assistant":
 # External ChatGPT (simple wrapper)
 if page == "ChatGPT (external)":
     st.header("External ChatGPT")
-    st.write("This opens chat.openai.com i
+    st.write("This opens chat.openai.com in your browser for further research.")
