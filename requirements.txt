@@ -5,7 +5,8 @@ numpy
 
 # AI model integration (Hugging Face)
 transformers
-torch
+torch==2.2.2+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # Authentication & encryption
 streamlit-authenticator
@@ -23,7 +24,7 @@ schedule
 # Voice input/output
 gTTS
 SpeechRecognition
-pyaudio
+sounddevice  # instead of pyaudio
 
 # PDF export & file handling
 fpdf
