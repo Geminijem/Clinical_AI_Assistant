@@ -1,42 +1,42 @@
-Clinical AI Assistant - Single-file Streamlit app
+#Clinical AI Assistant - Single-file Streamlit app
 
-Filename: app.py
+#Filename: app.py
 
-Purpose: Minimal, debugged, single-file Streamlit app implementing
+#Purpose: Minimal, debugged, single-file Streamlit app implementing
 
-- Sidebar menu/navigation
+#- Sidebar menu/navigation
 
-- Authentication (signup/signin) with SQLite (email + password)
+#- Authentication (signup/signin) with SQLite (email + password)
 
-- AI section (text + voice I/O using Web Speech API via a custom component)
+#- AI section (text + voice I/O using Web Speech API via a custom component)
 
-- Editable Quizzes (CRUD)
+#- Editable Quizzes (CRUD)
 
-- Editable Flashcards (CRUD)
+#- Editable Flashcards (CRUD)
 
-- Daily Check-in (mood, focus, hours, notes)
+#- Daily Check-in (mood, focus, hours, notes)
 
-- Daily Medical Motivational Quotes (editable)
+#- Daily Medical Motivational Quotes (editable)
 
-- Study Charts (from check-ins)
+#- Study Charts (from check-ins)
 
-- Study Planner with reminder alerts (in-browser scheduled notifications)
+#- Study Planner with reminder alerts (in-browser scheduled notifications)
 
-- Editable Mnemonics section
+#- Editable Mnemonics section
 
-- Bank vaults for medical notes (per subject)
+#- Bank vaults for medical notes (per subject)
 
-Notes: This is a single-file workable prototype tailored for Android browsers.
+#Notes: This is a single-file workable prototype tailored for Android browsers.
 
-It uses SQLite for persistence and streamlit.components.v1 for small JS integration.
+#It uses SQLite for persistence and streamlit.components.v1 for small JS integration.
 
 import streamlit as st from streamlit.components.v1 import components import sqlite3 from werkzeug.security import generate_password_hash, check_password_hash import pandas as pd import matplotlib.pyplot as plt from datetime import datetime, timedelta import uuid import json
 
------------------------
+#-----------------------
 
-DATABASE HELPERS
+#DATABASE HELPERS
 
------------------------
+#-----------------------
 
 DB_PATH = 'app_data.db'
 
@@ -46,29 +46,29 @@ def init_db(): conn = get_conn() c = conn.cursor() # users c.execute(''' CREATE 
 
 conn = init_db()
 
------------------------
+#-----------------------
 
-AUTH HELPERS
+#AUTH HELPERS
 
------------------------
+#-----------------------
 
 def signup(email, password): c = conn.cursor() user_id = str(uuid.uuid4()) pw_hash = generate_password_hash(password) try: c.execute('INSERT INTO users (id,email,password_hash,created_at) VALUES (?,?,?,?)', (user_id, email, pw_hash, datetime.utcnow().isoformat())) conn.commit() return user_id except sqlite3.IntegrityError: return None
 
 def login(email, password): c = conn.cursor() c.execute('SELECT id,password_hash FROM users WHERE email=?', (email,)) row = c.fetchone() if not row: return None user_id, pw_hash = row if check_password_hash(pw_hash, password): return user_id return None
 
------------------------
+#-----------------------
 
-SMALL UTILITIES
+#SMALL UTILITIES
 
------------------------
+#-----------------------
 
 def now(): return datetime.utcnow().isoformat()
 
------------------------
+#-----------------------
 
-JAVASCRIPT VOICE I/O COMPONENT
+#JAVASCRIPT VOICE I/O COMPONENT
 
------------------------
+#-----------------------
 
 VOICE_COMPONENT_HTML = """
 
